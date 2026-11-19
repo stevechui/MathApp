@@ -1,0 +1,5 @@
+/MathAppTests
+/MathAppUITests
+.build/
+MathApp.xcodeproj/
+.DS_Store
