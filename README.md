@@ -8,7 +8,8 @@ Math Time is a native iOS math practice app built with SwiftUI. It helps childre
 - Separate 1–4 digit settings for the first and second numbers.
 - Division problems displayed with a long-division bracket; answers are entered as quotient and remainder (for example, `3R1`).
 - A full-screen canvas for drawing and working through a problem.
-- A multiplication table activity with ten answer fields for a selected number from 1 to 10.
+- A multiplication table activity with ten answer fields for a selected number from 1 to 10, entered using an in-app number pad.
+- A saved score for regular arithmetic practice, with an option to reset it in Settings. Each question counts once on its first non-empty answer: only a correct first answer earns a point, and later corrections do not. Multiplication-table answers do not affect this score.
 - Settings are saved between app launches.
 - Confirmation before skipping a question that has not been answered correctly.
 

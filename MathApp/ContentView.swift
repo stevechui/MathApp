@@ -12,6 +12,8 @@ struct ContentView: View {
     @AppStorage("firstDigitCount") private var firstDigitCount = 1
     @AppStorage("secondDigitCount") private var secondDigitCount = 1
     @AppStorage("multiplicationTableNumber") private var multiplicationTableNumber = 4
+    @AppStorage("practiceCorrectAnswers") private var practiceCorrectAnswers = 0
+    @AppStorage("practiceAnsweredQuestions") private var practiceAnsweredQuestions = 0
     @State private var problem = MathProblem.generate(mode: .addition, firstDigitCount: 1, secondDigitCount: 1)
     @State private var strokes: [[CGPoint]] = []
     @State private var currentStroke: [CGPoint] = []
@@ -21,9 +23,11 @@ struct ContentView: View {
     @State private var isCanvasExpanded = false
     @State private var hasLoadedSavedSettings = false
     @State private var showSkipConfirmation = false
+    @State private var hasAttemptedCurrentQuestion = false
     @State private var multiplicationTableAnswers = Array(repeating: "", count: 10)
     @State private var multiplicationTableChecked = false
     @State private var multiplicationTableFeedback: String?
+    @State private var selectedMultiplicationTableRow: Int?
 
     private var selectedMode: PracticeMode {
         PracticeMode(rawValue: selectedModeRawValue) ?? .addition
@@ -48,6 +52,7 @@ struct ContentView: View {
                         if selectedMode == .multiplicationTable {
                             multiplicationTableCard
                         } else {
+                            scoreCard
                             workCard
                             answerCard
                         }
@@ -55,6 +60,11 @@ struct ContentView: View {
                     .frame(maxWidth: 560)
                     .padding()
                     .frame(maxWidth: .infinity)
+                }
+                .safeAreaInset(edge: .bottom, spacing: 0) {
+                    if selectedMode == .multiplicationTable, let selectedMultiplicationTableRow {
+                        multiplicationTableKeypad(for: selectedMultiplicationTableRow)
+                    }
                 }
             }
             .toolbar(.hidden, for: .navigationBar)
@@ -100,7 +110,9 @@ struct ContentView: View {
                         selectedMode: selectedModeBinding,
                         firstDigitCount: $firstDigitCount,
                         secondDigitCount: $secondDigitCount,
-                        multiplicationTableNumber: $multiplicationTableNumber
+                        multiplicationTableNumber: $multiplicationTableNumber,
+                        correctAnswers: $practiceCorrectAnswers,
+                        answeredQuestions: $practiceAnsweredQuestions
                     )
                 } label: {
                     Image(systemName: "gearshape.fill")
@@ -155,6 +167,23 @@ struct ContentView: View {
         .background(.white, in: RoundedRectangle(cornerRadius: 20))
     }
 
+    private var scoreCard: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "star.fill")
+                .foregroundStyle(Color.orange)
+            Text("Score")
+                .font(.system(.headline, design: .rounded))
+            Spacer()
+            Text("\(practiceCorrectAnswers) / \(practiceAnsweredQuestions)")
+                .font(.system(.title3, design: .rounded, weight: .bold))
+                .monospacedDigit()
+                .foregroundStyle(Color(red: 0.12, green: 0.23, blue: 0.42))
+                .accessibilityIdentifier("practice-score")
+        }
+        .padding(16)
+        .background(.white, in: RoundedRectangle(cornerRadius: 20))
+    }
+
     private var multiplicationTableCard: some View {
         VStack(spacing: 10) {
             HStack {
@@ -185,19 +214,22 @@ struct ContentView: View {
 
                     Spacer(minLength: 4)
 
-                    TextField("?", text: Binding(
-                        get: { multiplicationTableAnswers[multiplier - 1] },
-                        set: { value in
-                            multiplicationTableAnswers[multiplier - 1] = String(value.filter(\.isNumber).prefix(3))
-                            multiplicationTableChecked = false
-                            multiplicationTableFeedback = nil
-                        }
-                    ))
-                    .keyboardType(.numberPad)
-                    .multilineTextAlignment(.center)
-                    .font(.system(.title3, design: .rounded, weight: .bold))
-                    .frame(width: 76, height: 46)
-                    .background(Color(red: 0.94, green: 0.97, blue: 1), in: RoundedRectangle(cornerRadius: 10))
+                    Button {
+                        selectedMultiplicationTableRow = multiplier - 1
+                    } label: {
+                        Text(multiplicationTableAnswers[multiplier - 1].isEmpty ? "?" : multiplicationTableAnswers[multiplier - 1])
+                            .multilineTextAlignment(.center)
+                            .font(.system(.title3, design: .rounded, weight: .bold))
+                            .monospacedDigit()
+                            .frame(width: 76, height: 46)
+                            .background(
+                                selectedMultiplicationTableRow == multiplier - 1
+                                    ? Color.blue.opacity(0.18)
+                                    : Color(red: 0.94, green: 0.97, blue: 1),
+                                in: RoundedRectangle(cornerRadius: 10)
+                            )
+                    }
+                    .buttonStyle(.plain)
                     .accessibilityLabel("Answer for \(multiplicationTableNumber) times \(multiplier)")
                     .accessibilityIdentifier("table-answer-\(multiplier)")
 
@@ -235,6 +267,57 @@ struct ContentView: View {
         }
         .padding(16)
         .background(.white, in: RoundedRectangle(cornerRadius: 20))
+    }
+
+    private func multiplicationTableKeypad(for row: Int) -> some View {
+        VStack(spacing: 8) {
+            HStack {
+                Text("Answer for \(multiplicationTableNumber) × \(row + 1)")
+                    .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                Spacer()
+                Button("Done") {
+                    selectedMultiplicationTableRow = nil
+                }
+                .font(.system(.subheadline, design: .rounded, weight: .semibold))
+            }
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: 3), spacing: 8) {
+                ForEach(1...9, id: \.self) { digit in
+                    tableKey("\(digit)", row: row)
+                }
+                tableKey("Clear", row: row)
+                tableKey("0", row: row)
+                tableKey("⌫", row: row)
+            }
+        }
+        .padding(12)
+        .frame(maxWidth: 560)
+        .background(Color(red: 0.94, green: 0.97, blue: 1))
+        .frame(maxWidth: .infinity)
+    }
+
+    private func tableKey(_ title: String, row: Int) -> some View {
+        Button {
+            if title == "Clear" {
+                multiplicationTableAnswers[row] = ""
+            } else if title == "⌫" {
+                if !multiplicationTableAnswers[row].isEmpty {
+                    multiplicationTableAnswers[row].removeLast()
+                }
+            } else if multiplicationTableAnswers[row].count < 3 {
+                multiplicationTableAnswers[row].append(contentsOf: title)
+            }
+            multiplicationTableChecked = false
+            multiplicationTableFeedback = nil
+        } label: {
+            Text(title)
+                .font(.system(title.count > 1 ? .subheadline : .title3, design: .rounded, weight: .semibold))
+                .frame(maxWidth: .infinity)
+                .frame(height: 42)
+                .background(.white, in: RoundedRectangle(cornerRadius: 10))
+        }
+        .buttonStyle(.plain)
+        .accessibilityIdentifier("table-key-\(title)")
     }
 
     private var answerCard: some View {
@@ -348,7 +431,21 @@ struct ContentView: View {
         }
 
         let isCorrect = problem.isCorrect(answerInput)
-        feedbackMessage = isCorrect ? "That's right! Great work!" : "Not quite. Use your work space and try again."
+        let isFirstAttempt = !hasAttemptedCurrentQuestion
+        if isFirstAttempt {
+            hasAttemptedCurrentQuestion = true
+            practiceAnsweredQuestions += 1
+            if isCorrect {
+                practiceCorrectAnswers += 1
+            }
+        }
+        if isCorrect {
+            feedbackMessage = isFirstAttempt
+                ? "That's right! Great work!"
+                : "That's right, but this question was already tried. No extra point this time."
+        } else {
+            feedbackMessage = "Not quite. Use your work space and try again."
+        }
         feedbackIsCorrect = isCorrect
     }
 
@@ -370,6 +467,7 @@ struct ContentView: View {
         answerInput = ""
         feedbackMessage = nil
         feedbackIsCorrect = nil
+        hasAttemptedCurrentQuestion = false
         strokes = []
         currentStroke = []
     }
@@ -378,6 +476,7 @@ struct ContentView: View {
         multiplicationTableAnswers = Array(repeating: "", count: 10)
         multiplicationTableChecked = false
         multiplicationTableFeedback = nil
+        selectedMultiplicationTableRow = nil
     }
 
     private func checkMultiplicationTable() {
@@ -396,6 +495,9 @@ private struct SettingsView: View {
     @Binding var firstDigitCount: Int
     @Binding var secondDigitCount: Int
     @Binding var multiplicationTableNumber: Int
+    @Binding var correctAnswers: Int
+    @Binding var answeredQuestions: Int
+    @State private var showResetScoreConfirmation = false
 
     var body: some View {
         ZStack {
@@ -447,6 +549,28 @@ private struct SettingsView: View {
                     }
                     .padding(16)
                     .background(.white, in: RoundedRectangle(cornerRadius: 20))
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        Text("SCORE")
+                            .font(.system(.caption, design: .rounded, weight: .bold))
+                            .tracking(1)
+                            .foregroundStyle(.secondary)
+                        HStack {
+                            Text("Correct answers")
+                                .font(.system(.headline, design: .rounded))
+                            Spacer()
+                            Text("\(correctAnswers) / \(answeredQuestions)")
+                                .font(.system(.title3, design: .rounded, weight: .bold))
+                                .monospacedDigit()
+                        }
+                        Button("Reset score", role: .destructive) {
+                            showResetScoreConfirmation = true
+                        }
+                        .font(.system(.subheadline, design: .rounded, weight: .semibold))
+                        .accessibilityIdentifier("reset-score")
+                    }
+                    .padding(16)
+                    .background(.white, in: RoundedRectangle(cornerRadius: 20))
                 }
                 .frame(maxWidth: 560)
                 .padding()
@@ -456,6 +580,15 @@ private struct SettingsView: View {
         .navigationTitle("Setting")
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(Color(red: 0.94, green: 0.97, blue: 1), for: .navigationBar)
+        .alert("Reset score?", isPresented: $showResetScoreConfirmation) {
+            Button("Cancel", role: .cancel) {}
+            Button("Reset", role: .destructive) {
+                correctAnswers = 0
+                answeredQuestions = 0
+            }
+        } message: {
+            Text("This will clear your saved score for regular math practice.")
+        }
     }
 
     private var tableNumberPicker: some View {
